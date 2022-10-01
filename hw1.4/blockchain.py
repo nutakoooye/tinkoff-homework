@@ -9,7 +9,23 @@ def math_func(proof: int, previous_proof: int) -> int:
 
 
 def get_sha256(proof, previous_proof):
-    return hashlib.sha256(str(math_func(proof, previous_proof)).encode()).hexdigest()
+    return hashlib.sha256(
+        str(math_func(proof, previous_proof)).encode()).hexdigest()
+
+
+class Block:
+    def __init__(self, index, proof, previous_hash):
+        self.index = index
+        self.timestamp = str(datetime.datetime.now())
+        self.proof = proof
+        self.previous_hash = previous_hash
+
+    def get_hash(self):
+        hash = hashlib.sha256()
+        hash.update(str(self.previous_hash).encode('utf-8'))
+        hash.update(str(self.timestamp).encode('utf-8'))
+        hash.update(str(self.index).encode('utf-8'))
+        return hash.hexdigest()
 
 
 class Blockchain:
@@ -26,17 +42,13 @@ class Blockchain:
         self.complex = calc_complex
 
     def create_block(self, proof, previous_hash):
-        block = {
-            "index": len(self.chain) + 1,
-            "timestamp": str(datetime.datetime.now()),
-            "proof": proof,
-            "previous_hash": previous_hash
-        }
+        index = len(self.chain) + 1
+        block = Block(index, proof, previous_hash)
         self.chain.append(block)
 
         return block
 
-    def get_previous_block(self):
+    def get_previous_block(self) -> Block:
         return self.chain[-1]
 
     def proof_of_work(self, previous_proof):
@@ -53,10 +65,6 @@ class Blockchain:
 
         return new_proof
 
-    def hash(self, block):
-        encoded_block = json.dumps(block, sort_keys=True).encode()
-        return hashlib.sha256(encoded_block).hexdigest()
-
     def is_hash_complex_valid(self, hash_operation):
         return hash_operation[:len(self.complex)] == self.complex
 
@@ -66,11 +74,11 @@ class Blockchain:
 
         while block_index < len(self.chain):
             block = self.chain[block_index]
-            if block["prev_hash"] != self.hash(previous_block):
+            if block.previous_hash != previous_block.get_hash():
                 return False
 
-            previous_proof = previous_block["proof"]
-            proof = block["proof"]
+            previous_proof = previous_block.proof
+            proof = block.proof
             hash_operation = get_sha256(proof, previous_proof)
 
             if not self.is_hash_complex_valid(hash_operation):
@@ -85,7 +93,7 @@ class Blockchain:
 # user -> www.vk.ru -> login(eyes) - front -> POST username, password ==> backend - АПИ
 
 app = Flask(__name__)
-blockchain = Blockchain(calc_complex="000000000")
+blockchain = Blockchain(calc_complex="000000")
 
 
 # Graphql, GRPC
@@ -99,20 +107,34 @@ blockchain = Blockchain(calc_complex="000000000")
 @app.route("/mine_block", methods=["GET"])
 def mine_block():
     previous_block = blockchain.get_previous_block()
-    previous_proof = previous_block["proof"]
+    previous_proof = previous_block.proof
 
     proof = blockchain.proof_of_work(previous_proof)
-    previous_hash = blockchain.hash(previous_block)
+    previous_hash = previous_block.get_hash()
 
     block = blockchain.create_block(proof, previous_hash)
 
     response = {
         "message": "Block created",
-        "index": block["index"],
-        "timestamp": block["timestamp"],
-        "proof": block["proof"],
-        "previous_hash": block["previous_hash"]
+        "index": block.index,
+        "timestamp": block.timestamp,
+        "proof": block.proof,
+        "previous_hash": block.previous_hash
     }
+
+    return jsonify(response), 200
+
+
+@app.route("/get_chain", methods=["GET"])
+def get_chain():
+    response = []
+    for block in blockchain.chain:
+        response.append({
+            "index": block.index,
+            "timestamp": block.timestamp,
+            "proof": block.proof,
+            "previous_hash": block.previous_hash
+        })
 
     return jsonify(response), 200
 
