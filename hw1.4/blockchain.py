@@ -2,6 +2,7 @@ import datetime
 import hashlib
 from flask import Flask, jsonify
 import multiprocessing
+import threading
 
 
 def math_func(proof: int, previous_proof: int) -> int:
@@ -14,11 +15,12 @@ def get_sha256(proof, previous_proof):
 
 
 class Block:
-    def __init__(self, index, proof, previous_hash):
+    def __init__(self, index: int, proof: int, previous_hash: str, status: str):
         self.index = index
         self.timestamp = str(datetime.datetime.now())
         self.proof = proof
         self.previous_hash = previous_hash
+        self.status = status
 
     def get_hash(self):
         hash = hashlib.sha256()
@@ -29,21 +31,14 @@ class Block:
 
 
 class Blockchain:
-    """
-    BlockChain
-        [data1] -> [data2, hash(data1)] -> [data3, hash(data2)]
-        proof-of-work --
-        blockchain - nodes(компы)
-    """
-
     def __init__(self, calc_complex="00000"):
         self.chain = []
-        self.create_block(1, "0")
+        self.create_block(1, "0", "completed")
         self.complex = calc_complex
 
-    def create_block(self, proof, previous_hash):
+    def create_block(self, proof, previous_hash, status):
         index = len(self.chain) + 1
-        block = Block(index, proof, previous_hash)
+        block = Block(index, proof, previous_hash, status)
         self.chain.append(block)
 
         return block
@@ -54,7 +49,7 @@ class Blockchain:
     def proof_of_work(self, previous_proof, start_proof, stop_proof):
         new_proof = start_proof
         check_proof = False
-
+        print(start_proof, stop_proof)
         while check_proof is False and new_proof <= stop_proof:
             hash_operation = get_sha256(new_proof, previous_proof)
 
@@ -91,19 +86,10 @@ class Blockchain:
         return True
 
 
-# user -> www.vk.ru -> login(eyes) - front -> POST username, password ==> backend - АПИ
-
 app = Flask(__name__)
 blockchain = Blockchain(calc_complex="000000")
 
 
-# Graphql, GRPC
-
-# Shop - product API - REST
-# POST - create new product
-# PUT - change product
-# PATCH - change small product
-# GET - get list product
 def find_num(iterable):
     for num in iterable:
         if num:
@@ -114,7 +100,8 @@ def find_num(iterable):
 def task_gen(previous_proof, patch_length):
     start = 0
     end = patch_length
-    step = (end - start) // multiprocessing.cpu_count()  # число загружаемых заданий всем процессам
+    step = (
+                   end - start) // multiprocessing.cpu_count()  # число загружаемых заданий всем процессам
     while True:
         iterable = []
         for start_range in range(start, end, step):
@@ -125,62 +112,68 @@ def task_gen(previous_proof, patch_length):
         end += patch_length
 
 
-def mp_mining_proof(blockchain, previous_proof):
+def callback(results):
+    last_block = blockchain.get_previous_block()
+    proof = find_num(results)
+    if proof:
+        last_block.proof = proof
+        last_block.status = "completed"
+
+
+def mining_proof(previous_proof):
     with multiprocessing.Pool() as pool:
         patch_length = 10 ** len(blockchain.complex)
-        for iterable in task_gen(previous_proof, patch_length):
-            all_proof = pool.starmap(blockchain.proof_of_work, iterable)
-
-            proof = find_num(all_proof)
+        iterable = task_gen(previous_proof, patch_length)
+        last_block = blockchain.get_previous_block()
+        print(last_block.__dict__)
+        while last_block.status == "in_progress":
+            results = pool.starmap(blockchain.proof_of_work, next(iterable))
+            proof = find_num(results)
             if proof:
-                return proof
+                last_block.proof = proof
+                last_block.status = "completed"
+                break
 
 
 @app.route("/multiprocessing", methods=["GET"])
 def mp_mine_block():
     previous_block = blockchain.get_previous_block()
     previous_proof = previous_block.proof
-    t_begin = datetime.datetime.now()
-    proof = mp_mining_proof(blockchain, previous_proof)
-    t_end = datetime.datetime.now()
-    executed_time = t_end - t_begin
     previous_hash = previous_block.get_hash()
+    block = blockchain.create_block(None, previous_hash, "in_progress")
 
-    block = blockchain.create_block(proof, previous_hash)
-
+    # mining_proof(previous_proof)
     response = {
-        "message": "Block created",
+        "status": block.status,
         "index": block.index,
-        "timestamp": block.timestamp,
-        "proof": block.proof,
-        "previous_hash": block.previous_hash,
-        "executed time in seconds": executed_time.total_seconds()
     }
+    p = threading.Thread(target=mining_proof, args=(previous_proof,))
+    p.start()
     return jsonify(response), 200
 
 
-@app.route("/mine_block", methods=["GET"])
-def mine_block():
-    previous_block = blockchain.get_previous_block()
-    previous_proof = previous_block.proof
-    t_begin = datetime.datetime.now()
-    proof = blockchain.proof_of_work(previous_proof, 1, 10000000000)
-    t_end = datetime.datetime.now()
-    executed_time = t_end - t_begin
-    previous_hash = previous_block.get_hash()
-
-    block = blockchain.create_block(proof, previous_hash)
-
-    response = {
-        "message": "Block created",
-        "index": block.index,
-        "timestamp": block.timestamp,
-        "proof": block.proof,
-        "previous_hash": block.previous_hash,
-        "executed time in seconds": executed_time.total_seconds()
-    }
-
-    return jsonify(response), 200
+# @app.route("/mine_block", methods=["GET"])
+# def mine_block():
+#     previous_block = blockchain.get_previous_block()
+#     previous_proof = previous_block.proof
+#     t_begin = datetime.datetime.now()
+#     proof = blockchain.proof_of_work(previous_proof, 1, 10000000000)
+#     t_end = datetime.datetime.now()
+#     executed_time = t_end - t_begin
+#     previous_hash = previous_block.get_hash()
+#
+#     block = blockchain.create_block(proof, previous_hash)
+#
+#     response = {
+#         "message": "Block created",
+#         "index": block.index,
+#         "timestamp": block.timestamp,
+#         "proof": block.proof,
+#         "previous_hash": block.previous_hash,
+#         "executed time in seconds": executed_time.total_seconds()
+#     }
+#
+#     return jsonify(response), 200
 
 
 @app.route("/get_chain", methods=["GET"])
@@ -191,7 +184,8 @@ def get_chain():
             "index": block.index,
             "timestamp": block.timestamp,
             "proof": block.proof,
-            "previous_hash": block.previous_hash
+            "previous_hash": block.previous_hash,
+            "status": block.status
         })
 
     return jsonify(response), 200
