@@ -63,7 +63,6 @@ class Blockchain:
             else:
                 new_proof += 1
         if check_proof:
-            print("------------------", new_proof)
             return new_proof
         return None
 
@@ -92,85 +91,12 @@ class Blockchain:
         return True
 
 
-class CoreMiner(multiprocessing.Process):
-    def __init__(self, task_queue, result_queue):
-        multiprocessing.Process.__init__(self)
-        self.task_queue = task_queue
-        self.result_queue = result_queue
-
-    def run(self):
-        while True:
-            temp_task = self.task_queue.get()
-
-            if temp_task is None:
-                self.task_queue.task_done()
-                break
-
-            answer = temp_task.process()
-            print(answer)
-            self.task_queue.task_done()
-            if answer:
-                print(answer)
-                self.result_queue.put(answer)
-
-
-class Task():
-    def __init__(self,
-                 blockchain: Blockchain,
-                 previous_proof: int,
-                 start_proof: int,
-                 stop_proof: int):
-        self.blockchain = blockchain
-        self.previous_proof = previous_proof
-        self.start_proof = start_proof
-        self.stop_proof = stop_proof
-
-    def process(self):
-        return blockchain.proof_of_work(self.previous_proof,
-                                        self.start_proof,
-                                        self.stop_proof)
-
-
 # user -> www.vk.ru -> login(eyes) - front -> POST username, password ==> backend - АПИ
 
 app = Flask(__name__)
 blockchain = Blockchain(calc_complex="000000")
 
 
-def mining_proof(blockchain:blockchain)->int:
-    previous_block = blockchain.get_previous_block()
-    previous_proof = previous_block.proof
-
-    tasks = multiprocessing.JoinableQueue()
-    results = multiprocessing.Queue()
-
-    n_cores = multiprocessing.cpu_count()
-    miners = [CoreMiner(tasks, results) for i in range(n_cores)]
-
-    start_proof = 1
-    stop_proof = 10 ** (len(blockchain.complex)+1)
-    step = (stop_proof - start_proof) // 20
-    for miner_core in miners:
-        miner_core.start()
-
-    while results.empty():
-        print('new section')
-
-        for proof_section in range(start_proof, stop_proof, step):
-            task = Task(blockchain,
-                        previous_proof,
-                        proof_section,
-                        proof_section+step)
-            tasks.put(task)
-            print(proof_section,proof_section+step)
-        start_proof = stop_proof
-        stop_proof *= 2
-
-        for i in range(n_cores):
-            tasks.put(None)
-        tasks.join()
-
-    return results.get()
 # Graphql, GRPC
 
 # Shop - product API - REST
@@ -178,12 +104,48 @@ def mining_proof(blockchain:blockchain)->int:
 # PUT - change product
 # PATCH - change small product
 # GET - get list product
+def find_num(iterable):
+    for num in iterable:
+        if num:
+            return num
+    return None
+
+
+def task_gen(previous_proof, patch_length):
+    start = 0
+    end = patch_length
+    step = (end - start) // multiprocessing.cpu_count()  # число загружаемых заданий всем процессам
+    while True:
+        iterable = []
+        for start_range in range(start, end, step):
+            end_range = start_range + step
+            iterable.append((previous_proof, start_range, end_range))
+        yield iterable
+        start = end
+        end += patch_length
+
+
+def mp_mining_proof(blockchain, previous_proof):
+    with multiprocessing.Pool() as pool:
+        patch_length = 10 ** len(blockchain.complex)
+        for iterable in task_gen(previous_proof, patch_length):
+            all_proof = pool.starmap(blockchain.proof_of_work, iterable)
+
+            proof = find_num(all_proof)
+            if proof:
+                return proof
+
 
 @app.route("/multiprocessing", methods=["GET"])
 def mp_mine_block():
-    proof = mining_proof(blockchain)
     previous_block = blockchain.get_previous_block()
+    previous_proof = previous_block.proof
+    t_begin = datetime.datetime.now()
+    proof = mp_mining_proof(blockchain, previous_proof)
+    t_end = datetime.datetime.now()
+    executed_time = t_end - t_begin
     previous_hash = previous_block.get_hash()
+
     block = blockchain.create_block(proof, previous_hash)
 
     response = {
@@ -192,7 +154,7 @@ def mp_mine_block():
         "timestamp": block.timestamp,
         "proof": block.proof,
         "previous_hash": block.previous_hash,
-        # "executed time in seconds": executed_time.total_seconds()
+        "executed time in seconds": executed_time.total_seconds()
     }
     return jsonify(response), 200
 
@@ -201,10 +163,10 @@ def mp_mine_block():
 def mine_block():
     previous_block = blockchain.get_previous_block()
     previous_proof = previous_block.proof
-    # t_begin = datetime.datetime.now()
+    t_begin = datetime.datetime.now()
     proof = blockchain.proof_of_work(previous_proof, 1, 10000000000)
     t_end = datetime.datetime.now()
-    # executed_time = t_end - t_begin
+    executed_time = t_end - t_begin
     previous_hash = previous_block.get_hash()
 
     block = blockchain.create_block(proof, previous_hash)
@@ -215,7 +177,7 @@ def mine_block():
         "timestamp": block.timestamp,
         "proof": block.proof,
         "previous_hash": block.previous_hash,
-        # "executed time in seconds": executed_time.total_seconds()
+        "executed time in seconds": executed_time.total_seconds()
     }
 
     return jsonify(response), 200
