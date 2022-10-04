@@ -12,7 +12,7 @@ class BlockChainTestCase(unittest.TestCase):
         self.assertIsInstance(self.blockchain.chain[0], Block)
 
     def test_create_block(self):
-        block = self.blockchain.create_block(0,"0", False)
+        block = self.blockchain.init_block(0,"0", False)
         self.assertEqual(len(self.blockchain.chain), 2)
         self.assertEqual(block.proof, 0)
         self.assertEqual(block.in_progress, False)
