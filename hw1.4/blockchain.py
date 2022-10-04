@@ -1,6 +1,6 @@
 import datetime
 import hashlib
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, redirect, url_for
 import multiprocessing
 import threading
 
@@ -15,12 +15,20 @@ def get_sha256(proof, previous_proof):
 
 
 class Block:
-    def __init__(self, index: int, proof: int, previous_hash: str, status: str):
+    def __init__(self,
+                 index: int,
+                 proof: int,
+                 previous_hash: str,
+                 in_progress: bool):
         self.index = index
         self.timestamp = str(datetime.datetime.now())
         self.proof = proof
         self.previous_hash = previous_hash
-        self.status = status
+        self.in_progress = in_progress
+
+    def set_proof(self, proof):
+        self.proof = proof
+        self.in_progress = False
 
     def get_hash(self):
         hash = hashlib.sha256()
@@ -33,12 +41,13 @@ class Block:
 class Blockchain:
     def __init__(self, calc_complex="00000"):
         self.chain = []
-        self.create_block(1, "0", "completed")
+        self.init_block(1, "0", False)
         self.complex = calc_complex
 
-    def create_block(self, proof, previous_hash, status):
+    def init_block(self, proof: int, previous_hash: str,
+                     in_progress: bool) -> Block:
         index = len(self.chain) + 1
-        block = Block(index, proof, previous_hash, status)
+        block = Block(index, proof, previous_hash, in_progress)
         self.chain.append(block)
 
         return block
@@ -47,24 +56,82 @@ class Blockchain:
         return self.chain[-1]
 
     def proof_of_work(self, previous_proof, start_proof, stop_proof):
+        """search for proof in a certain range"""
         new_proof = start_proof
         check_proof = False
-        print(start_proof, stop_proof)
         while check_proof is False and new_proof <= stop_proof:
             hash_operation = get_sha256(new_proof, previous_proof)
-
             if self.is_hash_complex_valid(hash_operation):
                 check_proof = True
             else:
                 new_proof += 1
-        if check_proof:
-            return new_proof
+        return new_proof if check_proof else None
+
+    @staticmethod
+    def find_num(iterable:list):
+        for num in iterable:
+            if num:
+                return num
         return None
 
-    def is_hash_complex_valid(self, hash_operation):
+    @staticmethod
+    def range_gen(previous_proof: int, patch_length: int):
+        """
+        generating ranges to find proof
+
+        :param previous_proof:
+        :param patch_length:length of the return range to search for evidence
+        :return: range broken down by the number of cores in the system
+        """
+        start = 0
+        end = patch_length
+        step = (end - start) // multiprocessing.cpu_count()
+        while True:
+            iterable = []
+            for start_range in range(start, end, step):
+                end_range = start_range + step
+                iterable.append((previous_proof, start_range, end_range))
+            yield iterable
+            start = end
+            end += patch_length
+
+    def mining_proof(self, previous_proof: int):
+        """finding proof and adding it to the created block"""
+        with multiprocessing.Pool() as pool:
+            patch_length = 10 ** len(self.complex)
+            iterable = self.range_gen(previous_proof, patch_length)
+            last_block = self.get_previous_block()
+            while last_block.in_progress:
+                results = pool.starmap(self.proof_of_work, next(iterable))
+                proof = self.find_num(results)
+                if proof:
+                    last_block.set_proof(proof)
+
+    def new_block(self, wait=False) -> Block:
+        """
+        generating a new block and adding to the chain
+
+        :param wait: if false - background mining
+        :return: generated block
+        """
+        previous_block = self.get_previous_block()
+        if not previous_block.in_progress:
+            previous_proof = previous_block.proof
+            previous_hash = previous_block.get_hash()
+            block = self.init_block(None, previous_hash, True)
+            p = threading.Thread(target=self.mining_proof,
+                                 args=(previous_proof,))
+            p.start()
+            if wait:
+                p.join()
+        else:
+            block = previous_block
+        return block
+
+    def is_hash_complex_valid(self, hash_operation: str) -> bool:
         return hash_operation[:len(self.complex)] == self.complex
 
-    def chain_valid(self):
+    def chain_valid(self) -> bool:
         previous_block = self.chain[0]
         block_index = 1
 
@@ -90,102 +157,42 @@ app = Flask(__name__)
 blockchain = Blockchain(calc_complex="000000")
 
 
-def find_num(iterable):
-    for num in iterable:
-        if num:
-            return num
-    return None
+@app.route('/mine_block', methods=['GET', 'POST'])
+def mine_block():
+    if request.method == 'POST':
+        block = blockchain.new_block(wait=False)
+        return redirect(url_for("get_block_status", id=block.index), 301)
+    response = '''
+           <form method="POST">
+               <input type="submit" value="Start mining" 
+               style="width: 100%; height: 10%">
+           </form>'''
+    return response
 
 
-def task_gen(previous_proof, patch_length):
-    start = 0
-    end = patch_length
-    step = (
-                   end - start) // multiprocessing.cpu_count()  # число загружаемых заданий всем процессам
-    while True:
-        iterable = []
-        for start_range in range(start, end, step):
-            end_range = start_range + step
-            iterable.append((previous_proof, start_range, end_range))
-        yield iterable
-        start = end
-        end += patch_length
-
-
-def callback(results):
-    last_block = blockchain.get_previous_block()
-    proof = find_num(results)
-    if proof:
-        last_block.proof = proof
-        last_block.status = "completed"
-
-
-def mining_proof(previous_proof):
-    with multiprocessing.Pool() as pool:
-        patch_length = 10 ** len(blockchain.complex)
-        iterable = task_gen(previous_proof, patch_length)
-        last_block = blockchain.get_previous_block()
-        print(last_block.__dict__)
-        while last_block.status == "in_progress":
-            results = pool.starmap(blockchain.proof_of_work, next(iterable))
-            proof = find_num(results)
-            if proof:
-                last_block.proof = proof
-                last_block.status = "completed"
-                break
-
-
-@app.route("/multiprocessing", methods=["GET"])
-def mp_mine_block():
-    previous_block = blockchain.get_previous_block()
-    previous_proof = previous_block.proof
-    previous_hash = previous_block.get_hash()
-    block = blockchain.create_block(None, previous_hash, "in_progress")
-
-    # mining_proof(previous_proof)
-    response = {
-        "status": block.status,
-        "index": block.index,
-    }
-    p = threading.Thread(target=mining_proof, args=(previous_proof,))
-    p.start()
-    return jsonify(response), 200
-
-
-# @app.route("/mine_block", methods=["GET"])
-# def mine_block():
-#     previous_block = blockchain.get_previous_block()
-#     previous_proof = previous_block.proof
-#     t_begin = datetime.datetime.now()
-#     proof = blockchain.proof_of_work(previous_proof, 1, 10000000000)
-#     t_end = datetime.datetime.now()
-#     executed_time = t_end - t_begin
-#     previous_hash = previous_block.get_hash()
-#
-#     block = blockchain.create_block(proof, previous_hash)
-#
-#     response = {
-#         "message": "Block created",
-#         "index": block.index,
-#         "timestamp": block.timestamp,
-#         "proof": block.proof,
-#         "previous_hash": block.previous_hash,
-#         "executed time in seconds": executed_time.total_seconds()
-#     }
-#
-#     return jsonify(response), 200
+@app.route("/block/<int:id>/status", methods=["GET"])
+def get_block_status(id):
+    index = id - 1
+    response = {"id": id}
+    if index < len(blockchain.chain):
+        block = blockchain.chain[index]
+        response["status"] = "in progress" if block.in_progress else "completed"
+    else:
+        response["status"] = "not found"
+    return jsonify(response)
 
 
 @app.route("/get_chain", methods=["GET"])
 def get_chain():
     response = []
     for block in blockchain.chain:
+        status = "In progress" if block.in_progress else "Completed"
         response.append({
             "index": block.index,
             "timestamp": block.timestamp,
             "proof": block.proof,
             "previous_hash": block.previous_hash,
-            "status": block.status
+            "status": status
         })
 
     return jsonify(response), 200
@@ -198,4 +205,5 @@ def valid():
     }), 200
 
 
-app.run(host="127.0.0.1", debug=True, port=5000)
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", debug=True, port=5000)
