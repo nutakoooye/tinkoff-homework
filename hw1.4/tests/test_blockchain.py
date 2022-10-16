@@ -1,4 +1,5 @@
 import unittest
+from multiprocessing import cpu_count
 from blockchain import Block, Blockchain
 
 
@@ -55,6 +56,8 @@ class BlockChainTestCase(unittest.TestCase):
     def test_proof_of_work_none_if_not_find(self):
         self.assertIsNone(self.blockchain.proof_of_work(0, 1, 2))
 
+    @unittest.skipIf(cpu_count() != 4,
+                     "supported only with 4 processor cores")
     def test_range_gen(self):
         patch = self.blockchain.range_gen(0, 100)
         self.assertEqual(
