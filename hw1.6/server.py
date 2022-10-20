@@ -77,7 +77,7 @@ class TaskQueueServer:
         if request.type_r == "ACK":
             return self.ack_task(request.idx, r_queue)
         if request.type_r == "IN":
-            self.in_task(request.idx, r_queue)
+            return self.in_task(request.idx, r_queue)
         if request.type_r == "SAVE":
             return self.save_state()
         return "unexpected behavior"
