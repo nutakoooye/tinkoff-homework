@@ -1,0 +1,6 @@
+requests
+pydantic
+mock
+flake8
+black
+mypy
