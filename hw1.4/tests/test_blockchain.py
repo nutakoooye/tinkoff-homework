@@ -1,6 +1,8 @@
 import unittest
 from multiprocessing import cpu_count
-from blockchain import Block, Blockchain
+from blockchain import Blockchain
+from block import Block
+from mining.multiprocessor import range_gen, proof_of_work
 
 
 class BlockChainTestCase(unittest.TestCase):
@@ -13,7 +15,7 @@ class BlockChainTestCase(unittest.TestCase):
         self.assertIsInstance(self.blockchain.chain[0], Block)
 
     def test_create_block(self):
-        block = self.blockchain.init_block(0,"0", False)
+        block = self.blockchain.init_block(0, "0", False)
         self.assertEqual(len(self.blockchain.chain), 2)
         self.assertEqual(block.proof, 0)
         self.assertEqual(block.in_progress, False)
@@ -21,12 +23,14 @@ class BlockChainTestCase(unittest.TestCase):
     def test_get_previous(self):
         for _ in range(5):
             self.blockchain.new_block(wait=True)
-        self.assertEqual(self.blockchain.get_previous_block(),
-                         self.blockchain.chain[-1])
+        self.assertEqual(
+            self.blockchain.get_previous_block(), self.blockchain.chain[-1]
+        )
 
     def test_get_previous_with_one_block(self):
-        self.assertEqual(self.blockchain.get_previous_block(),
-                         self.blockchain.chain[0])
+        self.assertEqual(
+            self.blockchain.get_previous_block(), self.blockchain.chain[0]
+        )
 
     def test_valid_blockchain(self):
         for _ in range(5):
@@ -54,17 +58,26 @@ class BlockChainTestCase(unittest.TestCase):
         self.assertFalse(self.blockchain.chain_valid())
 
     def test_proof_of_work_none_if_not_find(self):
-        self.assertIsNone(self.blockchain.proof_of_work(0, 1, 2))
+        self.assertIsNone(proof_of_work("0", 0, 1, 2))
 
-    @unittest.skipIf(cpu_count() != 4,
-                     "supported only with 4 processor cores")
+    @unittest.skipIf(cpu_count() != 4, "supported only with 4 processor cores")
     def test_range_gen(self):
-        patch = self.blockchain.range_gen(0, 100)
+        patch = range_gen('0', 0, 100)
         self.assertEqual(
             next(patch),
-            [(0, 0, 25), (0, 25, 50), (0, 50, 75), (0, 75, 100)]
+            [
+                ('0', 0, 0, 25),
+                ('0', 0, 25, 50),
+                ('0', 0, 50, 75),
+                ('0', 0, 75, 100),
+            ],
         )
         self.assertEqual(
             next(patch),
-            [(0, 100, 125), (0, 125, 150), (0, 150, 175), (0, 175, 200)]
+            [
+                ('0', 0, 100, 125),
+                ('0', 0, 125, 150),
+                ('0', 0, 150, 175),
+                ('0', 0, 175, 200),
+            ],
         )
