@@ -1,8 +1,9 @@
 import unittest
 from multiprocessing import cpu_count
-from blockchain import Blockchain
-from block import Block
-from mining.multiprocessor import range_gen, proof_of_work
+from blockchain.chain import Blockchain
+from blockchain.block import Block
+from blockchain.mining.singleprocess import proof_of_work
+from blockchain.mining.multiprocess import patch_generator
 
 
 class BlockChainTestCase(unittest.TestCase):
@@ -62,7 +63,7 @@ class BlockChainTestCase(unittest.TestCase):
 
     @unittest.skipIf(cpu_count() != 4, "supported only with 4 processor cores")
     def test_range_gen(self):
-        patch = range_gen('0', 0, 100)
+        patch = patch_generator('0', 0, 100)
         self.assertEqual(
             next(patch),
             [

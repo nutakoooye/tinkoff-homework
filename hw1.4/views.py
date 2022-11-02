@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request, redirect, url_for
-from blockchain import Blockchain
+from blockchain.chain import Blockchain
 
 app = Flask(__name__)
 blockchain = Blockchain(calc_complex="000000")

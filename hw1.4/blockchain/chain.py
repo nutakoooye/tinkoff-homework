@@ -1,7 +1,6 @@
-from time import time
-
-from mining.multiprocessor import mining_proof, get_sha256
-from block import Block
+from .mining.multiprocess import mp_mining_proof
+from .mining.singleprocess import get_sha256
+from .block import Block
 import threading
 
 
@@ -24,10 +23,8 @@ class Blockchain:
         return self.chain[-1]
 
     def mining(self, previous_proof):
-        start_time = time()
-        proof = mining_proof(previous_proof, self.complex)
-        time_mining = time() - start_time
-        print(f"Time mining proof {proof} = {time_mining}")
+        proof = mp_mining_proof(previous_proof, self.complex)
+
         last_block = self.get_previous_block()
         last_block.set_proof(proof)
 
@@ -42,7 +39,9 @@ class Blockchain:
         if not previous_block.in_progress:
             previous_proof = previous_block.proof
             previous_hash = previous_block.get_hash()
+
             block = self.init_block(0, previous_hash, True)
+
             p = threading.Thread(target=self.mining, args=(previous_proof,))
             p.start()
             if wait:
