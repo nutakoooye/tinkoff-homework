@@ -53,9 +53,10 @@ class TextHistory:
 
         return self.version
 
-    def __unite_actions(self, num: int, action: Action):
-        self._actions[num] = action
-        del self._actions[num + 1]
+    @staticmethod
+    def __unite_actions(actions: list[Action], num: int, action: Action):
+        actions[num] = action
+        del actions[num + 1]
 
     @staticmethod
     def __double_insert(
@@ -120,41 +121,36 @@ class TextHistory:
 
         return None
 
-    def _compare_two_actions(self, num: int) -> bool:
-        action1 = self._actions[num]
-        action2 = self._actions[num + 1]
-        is_united = False
+    def _compare_two_actions(
+        self, actions: list[Action], num: int
+    ) -> Optional[Action]:
+        action1 = actions[num]
+        action2 = actions[num + 1]
 
         match action1, action2:
             case InsertAction() as act1, InsertAction() as act2:
                 ins_act = self.__double_insert(act1, act2)
-                if ins_act:
-                    self.__unite_actions(num, ins_act)
-                    is_united = True
+                return ins_act
             case DeleteAction() as act1, DeleteAction() as act2:
                 del_act = self.__double_delete(act1, act2)
-                if del_act:
-                    self.__unite_actions(num, del_act)
-                    is_united = True
+                return del_act
             case ReplaceAction() as act1, ReplaceAction() as act2:
                 repl_act = self.__double_replace(act1, act2)
-                if repl_act:
-                    self.__unite_actions(num, repl_act)
-                    is_united = True
+                return repl_act
             case DeleteAction() as act1, InsertAction() as act2:
                 repl_act = self.__del_and_ins_eq_repl(act1, act2)
-                if repl_act:
-                    self.__unite_actions(num, repl_act)
-                    is_united = True
+                return repl_act
+        return None
 
-        return is_united
-
-    def optimize_actions(self):
+    def _optimize_actions(self, actions: list[Action]) -> list[Action]:
         num = 0
-        while num < len(self._actions) - 1:
-            is_united = self._compare_two_actions(num)
-            if not is_united:
+        while num < len(actions) - 1:
+            un_action = self._compare_two_actions(actions, num)
+            if un_action:
+                self.__unite_actions(actions, num, un_action)
+            else:
                 num += 1
+        return actions
 
     def _version_validator(
         self, from_version: Optional[int], to_version: Optional[int]
@@ -179,9 +175,6 @@ class TextHistory:
         optimize: bool = False,
     ) -> list[Action]:
 
-        if optimize:
-            self.optimize_actions()
-
         from_version, to_version = self._version_validator(start, stop)
 
         actions = [
@@ -189,5 +182,8 @@ class TextHistory:
             for action in self._actions
             if from_version < action.to_version <= to_version
         ]
+
+        if optimize:
+            actions = self._optimize_actions(actions)
 
         return actions
