@@ -1,8 +1,8 @@
 import sys
 
 import tvmazetgbot
-
-bot = tvmazetgbot.Bot(token="5547280874:AAFksFMJuHs7FhfU7Ag0tjVieZGLw8t63MY")
+token = input("Input the tg bot token: ")
+bot = tvmazetgbot.Bot(token)
 try:
     print("Starting bot")
     bot.start()
