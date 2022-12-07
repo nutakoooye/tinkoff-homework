@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+    <a href="{% url 'index' %}">main page</a>
+    <h1>title: {{ post.title }} </h1>
+    <h1>date published: {{ post.pub_date }} </h1>
+    <p>{{ post.text }}</p>
+    <h2>Commentaries:</h2>
+    <form action="{% url 'comment_post' post.id %}" method="post">
+        {% csrf_token %}
+        <fieldset>
+            {% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+            <input type="text" name="comment" id="comment">
+            <input type="submit" value="Comment">
+        </fieldset>
+    </form>
+
+
+    <ul>
+        {% for comment in page_obj %}
+            <li>{{ comment.text }} - {{ comment.pub_date }}</li>
+        {% endfor %}
+    </ul>
+    <div class="pagination">
+        <span class="step-links">
+            {% if page_obj.has_previous %}
+                <a href="?page=1">&laquo; first</a>
+                <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+            {% endif %}
+
+            <span class="current">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+            </span>
+
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}">next</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+            {% endif %}
+        </span>
+    </div>
+</body>
+</html>
