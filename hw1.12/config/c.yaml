@@ -1,0 +1,10 @@
+port: 8083
+path: tmp/c/
+neighbors:
+  b:
+    host: localhost
+    port: 8082
+  a:
+    host: localhost
+    port: 8081
+save_copies: Yes
