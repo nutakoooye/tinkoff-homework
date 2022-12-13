@@ -1,0 +1,28 @@
+{% extends "blog/base.html" %}
+
+{% block content %}
+<a href="{% url 'create_post' %}"><button type="button" class="btn btn-success">Create</button></a>
+
+    {% if posts %}
+<div class="btn-group" style="margin: 5px;">
+    <span style="margin: 6px;">Order by:  </span>
+  <a href="{% url 'index' %}?order_dy=date" class="btn btn-primary" aria-current="page">date</a>
+  <a href="{% url 'index' %}?order_dy=num_views" class="btn btn-primary" aria-current="page">popularity</a>
+</div>
+        {% for post in posts %}
+            <div class="card" style="margin: 5px;">
+                <div class="card-header">
+                    {{ post.pub_date }}
+                </div>
+            <div class="card-body">
+                <blockquote class="blockquote mb-0">
+                    <p><a href="{% url 'post' post.id %}">{{post.title}}</a></p>
+                    <footer class="blockquote-footer"><cite title="Source Title">{{ post.text|truncatechars:200 }}</cite><br>views: {{post.num_views}}</footer>
+                </blockquote>
+            </div>
+</div>
+        {% endfor %}
+    {% else %}
+        <h2> No posts</h2>
+    {% endif %}
+{% endblock %}
