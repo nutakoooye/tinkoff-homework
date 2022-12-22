@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<form action="{% url 'index' %}" method="get">
+        <fieldset>
+            <label for="search">Введите ключевое слово</label>
+            <input type="text" name="search" id="search">
+            <input type="submit" value="search">
+        </fieldset>
+    </form>
+<h4><a href="{% url 'index' %}?order_dy=date">order by date</a></h4>
+<h4><a href="{% url 'index' %}?order_dy=num_views">order by popularity</a></h4>
+<ul>
+    {% if posts %}
+        {%for post in posts %}
+            <li><a href="{% url 'post' post.id %}">{{post.title}} -
+                {{ post.num_views }} view{{post.num_views|pluralize:'s'}}
+            ({{ post.pub_date }})</a></li>
+        {% endfor %}
+    {% endif %}
+</ul>
+<h4><a href="{% url 'create_post' %}">Create new post</a></h4>
+</body>
+</html>

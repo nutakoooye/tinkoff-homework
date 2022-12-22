@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<form action="{% url 'create_post' %}" method="post">
+        {% csrf_token %}
+        <fieldset>
+          <legend><h1>New post</h1></legend>
+            {% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+            <label for="title">Введите заголовок статьи</label>
+            <input type="text" name="title" id="title">
+            <br>
+            <br>
+            <label for="text">Введите текст статьи</label>
+            <input type="textarea" name="text" id="text">
+            <br>
+            <br>
+            <input type="submit" value="Post">
+        </fieldset>
+    </form>
+</body>
+</html>
